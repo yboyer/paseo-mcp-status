@@ -1,0 +1,8 @@
+{
+  "id": "mcp-status",
+  "name": "MCP status",
+  "media": [],
+  "requirements": {
+    "paseo": ">=0.11.2"
+  }
+}
