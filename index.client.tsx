@@ -1,4 +1,8 @@
+import { settingsRpc } from "@getpaseo/plugin";
+import { pluginSettings, type LanguagePreference } from "./shared/settings";
+import { SettingsScreen } from "./client/settings-screen";
 import type { PluginButtonRegistration, PluginClientContext } from "@getpaseo/plugin/client";
+import { getMessages } from "./client/i18n";
 import { AuthAlert } from "./client/auth-alert";
 import { StatusPopover } from "./client/status-popover";
 import { ALERT_KIND, alertSchema, getStatusRpc, toMcpProvider, type McpStatus } from "./shared/mcp";
@@ -23,6 +27,25 @@ function pillLabel(status: McpStatus | null) {
 export default function contribute(client: PluginClientContext) {
   const pills = new Map<string, { pill: PluginButtonRegistration; timer: ReturnType<typeof setInterval> }>();
   const lifetime = new AbortController();
+  let language: LanguagePreference = "auto";
+  const removeSettings = client.addSettingsScreen({ id: "mcp-status", title: "MCP status", icon: "Plug", Component: SettingsScreen });
+  const refreshLanguage = async () => {
+    try {
+      const state = await client.rpc(settingsRpc(pluginSettings.id).read, {});
+      if (lifetime.signal.aborted) return;
+      const parsed = state.status === "ready" ? pluginSettings.schema.safeParse(state.values) : null;
+      const next = parsed?.success ? parsed.data.language : "auto";
+      const title = getMessages(next).title;
+      if (title !== getMessages(language).title) {
+        for (const { pill } of pills.values()) pill.update({ title });
+      }
+      language = next;
+    } catch (error) {
+      if (!lifetime.signal.aborted) console.error("[mcp-status] language settings read failed", error);
+    }
+  };
+  void refreshLanguage();
+  const languageTimer = setInterval(refreshLanguage, POLL_MS);
 
   const unregister = (agentId: string) => {
     const tracked = pills.get(agentId);
@@ -41,7 +64,7 @@ export default function contribute(client: PluginClientContext) {
       workspaceId: agent.workspaceId,
       agentId: agent.id,
       button: {
-        title: "Statut des serveurs MCP",
+        title: getMessages(language).title,
         icon: "Plug",
         label: pillLabel(null),
         behavior: { kind: "popover", Content: StatusPopover },
@@ -93,6 +116,8 @@ export default function contribute(client: PluginClientContext) {
 
   return () => {
     lifetime.abort();
+    clearInterval(languageTimer);
+    removeSettings();
     removeAll();
   };
 }

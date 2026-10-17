@@ -4,9 +4,11 @@ import { useMemo } from "react";
 import { Pressable, Text, View } from "react-native";
 import type { z } from "zod";
 import type { alertSchema } from "../shared/mcp";
+import { useTranslations } from "./use-translations";
 import { useLogin } from "./status-popover";
 
 export function AuthAlert({ agentId, item, theme, layout }: PluginTimelineItemProps<z.output<typeof alertSchema>>) {
+  const { t } = useTranslations();
   const { provider, cwd, server, resolved } = item.data;
   const login = useLogin({ agentId, provider, cwd });
   const styles = useMemo(
@@ -35,17 +37,17 @@ export function AuthAlert({ agentId, item, theme, layout }: PluginTimelineItemPr
         color={resolved ? theme.colors.statusSuccess : theme.colors.statusWarning}
       />
       <Text style={styles.text}>
-        {resolved ? `MCP ${server} : authentifié.` : `MCP ${server} : authentification requise.`}
+        {t.authAlert(server, resolved)}
       </Text>
       {resolved ? null : (
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel={`Se connecter à ${server}`}
+          accessibilityLabel={t.loginTo(server)}
           disabled={login.isPending}
           style={styles.button}
           onPress={() => login.mutate(server)}
         >
-          <Text style={styles.buttonText}>{login.isPending ? "En cours…" : "Se connecter"}</Text>
+          <Text style={styles.buttonText}>{login.isPending ? t.busy : t.login}</Text>
         </Pressable>
       )}
     </View>

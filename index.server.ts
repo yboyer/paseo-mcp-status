@@ -4,9 +4,12 @@ import { approveClaudeServer } from "./server/approve";
 import { login } from "./server/cli";
 import * as store from "./server/store";
 
+import { pluginSettings } from "./shared/settings";
+
 const POLL_MS = 60_000;
 
 export default function contribute(server: PluginServerContext) {
+  server.registerSettings(pluginSettings);
   const onActivity = (agent: PluginHookAgent) => {
     const provider = toMcpProvider(agent.provider);
     if (!provider) return;
