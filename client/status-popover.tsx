@@ -5,6 +5,7 @@ import { Icon, useToast } from "@getpaseo/plugin/client/react-native";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo } from "react";
 import { Pressable, Text, View } from "react-native";
+import { useTranslations } from "./use-translations";
 import {
   approveRpc,
   getStatusRpc,
@@ -16,14 +17,6 @@ import {
   type McpServerState,
   type McpStatus,
 } from "../shared/mcp";
-
-export const STATE_LABELS: Record<McpServerState, string> = {
-  connected: "Connecté",
-  "needs-auth": "Auth requise",
-  "pending-approval": "En attente d'approbation",
-  failed: "Échec",
-  disabled: "Désactivé",
-};
 
 export function stateColor(theme: PluginTheme, state: McpServerState) {
   if (state === "connected") return theme.colors.statusSuccess;
@@ -43,17 +36,18 @@ export function statusQueryKey(target: Target) {
 }
 
 export function useLogin(target: Target) {
+  const { t } = useTranslations();
   const login = useRpc(loginRpc);
   const toast = useToast();
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (server: string) => {
-      toast.show(`Connexion à ${server} : terminez l'auth dans le navigateur`, { variant: "info", durationMs: 4000 });
+      toast.show(t.loginStarted(server), { variant: "info", durationMs: 4000 });
       return login({ ...target, server });
     },
     onSuccess: ({ ok }, server) => {
-      if (ok) toast.show(`${server} connecté`, { variant: "success" });
-      else toast.error(`Échec de la connexion à ${server}`);
+      if (ok) toast.show(t.loginSucceeded(server), { variant: "success" });
+      else toast.error(t.loginFailed(server));
       void queryClient.invalidateQueries({ queryKey: statusQueryKey(target) });
     },
     onError: (error: Error) => toast.error(error.message),
@@ -70,6 +64,7 @@ export function StatusPopover(props: PluginButtonContentProps) {
 }
 
 function StatusList({ theme, compact, target }: { theme: PluginTheme; compact: boolean; target: Target }) {
+  const { t, language } = useTranslations();
   const getStatus = useRpc(getStatusRpc);
   const refreshStatus = useRpc(refreshStatusRpc);
   const approve = useRpc(approveRpc);
@@ -120,12 +115,12 @@ function StatusList({ theme, compact, target }: { theme: PluginTheme; compact: b
       return (
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel={`Se connecter à ${server.name}`}
+          accessibilityLabel={t.loginTo(server.name)}
           disabled={login.isPending}
           style={styles.button}
           onPress={() => login.mutate(server.name)}
         >
-          <Text style={styles.buttonText}>{busy ? "En cours…" : "Se connecter"}</Text>
+          <Text style={styles.buttonText}>{busy ? t.busy : t.login}</Text>
         </Pressable>
       );
     }
@@ -133,12 +128,12 @@ function StatusList({ theme, compact, target }: { theme: PluginTheme; compact: b
       return (
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel={`Approuver ${server.name}`}
+          accessibilityLabel={t.approveServer(server.name)}
           disabled={approval.isPending}
           style={styles.button}
           onPress={() => approval.mutate(server.name)}
         >
-          <Text style={styles.buttonText}>Approuver</Text>
+          <Text style={styles.buttonText}>{t.approve}</Text>
         </Pressable>
       );
     }
@@ -146,12 +141,12 @@ function StatusList({ theme, compact, target }: { theme: PluginTheme; compact: b
       return (
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel={`Réessayer ${server.name}`}
+          accessibilityLabel={t.retryServer(server.name)}
           disabled={checking}
           style={styles.ghost}
           onPress={() => refresh.mutate()}
         >
-          <Text style={styles.ghostText}>Réessayer</Text>
+          <Text style={styles.ghostText}>{t.retry}</Text>
         </Pressable>
       );
     }
@@ -162,18 +157,18 @@ function StatusList({ theme, compact, target }: { theme: PluginTheme; compact: b
     <View style={styles.root}>
       <View style={styles.header}>
         <View style={styles.grow}>
-          <Text style={styles.title}>Serveurs MCP · {target.provider === "claude" ? "Claude Code" : "Codex"}</Text>
+          <Text style={styles.title}>{t.servers} · {target.provider === "claude" ? "Claude Code" : "Codex"}</Text>
           <Text style={styles.muted}>
             {checking
-              ? "Vérification…"
+              ? t.checking
               : data?.checkedAt
-                ? `Vérifié à ${new Date(data.checkedAt).toLocaleTimeString()}`
-                : "Jamais vérifié"}
+                ? t.checkedAt(new Date(data.checkedAt).toLocaleTimeString(language))
+                : t.neverChecked}
           </Text>
         </View>
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel="Rafraîchir le statut MCP"
+          accessibilityLabel={t.refresh}
           disabled={checking}
           style={styles.ghost}
           onPress={() => refresh.mutate()}
@@ -182,7 +177,7 @@ function StatusList({ theme, compact, target }: { theme: PluginTheme; compact: b
         </Pressable>
       </View>
       {data?.error ? <Text style={styles.error}>{data.error}</Text> : null}
-      {data && data.servers.length === 0 && !checking ? <Text style={styles.muted}>Aucun serveur MCP configuré.</Text> : null}
+      {data && data.servers.length === 0 && !checking ? <Text style={styles.muted}>{t.empty}</Text> : null}
       {data?.servers.map((server) => (
         <View key={server.name} style={styles.row}>
           <Icon name="Circle" size={10} color={stateColor(theme, server.state)} />
@@ -191,7 +186,7 @@ function StatusList({ theme, compact, target }: { theme: PluginTheme; compact: b
               {server.name}
             </Text>
             <Text style={styles.muted} numberOfLines={1}>
-              {server.state === "connected" ? STATE_LABELS.connected : server.detail || STATE_LABELS[server.state]}
+              {server.state === "connected" ? t.states.connected : server.detail || t.states[server.state]}
             </Text>
           </View>
           {action(server)}
