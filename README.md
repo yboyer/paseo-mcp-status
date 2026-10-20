@@ -54,6 +54,5 @@ npm run typecheck
 
 ## Known limitations
 
-- Some `claude.ai` connectors are hidden from the list (`HIDDEN_SERVERS` in `server/cli.ts`).
 - Claude Code status is parsed from the human-readable `claude mcp list` output and may break if its format changes.
 - UI strings support French and English. Choose **Automatic**, **Français**, or **English** in the plugin settings. The preference is persisted per host and shared by its connected clients. In Automatic mode, the client browser/device locale selects French for `fr` (including regional variants); other or unavailable locales use English. Paseo SDK 0.11.2 does not expose an application language setting. Translations are maintained in `client/i18n.ts`. CLI details and errors are displayed as received.

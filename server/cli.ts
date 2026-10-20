@@ -78,22 +78,10 @@ export function parseCodexList(output: string): McpServer[] {
   });
 }
 
-const HIDDEN_SERVERS = new Set([
-  "claude.ai Miro",
-  "claude.ai Slack",
-  "claude.ai Kahoot!",
-  "claude.ai Mobbin",
-  "claude.ai Google Calendar",
-  "claude.ai Claude Docs",
-  "claude.ai Qonto",
-]);
-
 export async function listServers(provider: McpProvider, cwd: string): Promise<McpServer[]> {
-  const servers =
-    provider === "claude"
-      ? parseClaudeList(await run("claude", ["mcp", "list"], cwd))
-      : parseCodexList(await run("codex", ["mcp", "list", "--json"], cwd, 30_000));
-  return servers.filter((server) => !HIDDEN_SERVERS.has(server.name));
+  return provider === "claude"
+    ? parseClaudeList(await run("claude", ["mcp", "list"], cwd))
+    : parseCodexList(await run("codex", ["mcp", "list", "--json"], cwd, 30_000));
 }
 
 // Opens the browser for OAuth; resolves when the CLI exits (success or not).
