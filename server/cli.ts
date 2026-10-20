@@ -96,13 +96,35 @@ export async function listServers(provider: McpProvider, cwd: string): Promise<M
   return servers.filter((server) => !HIDDEN_SERVERS.has(server.name));
 }
 
-// Opens the browser for OAuth; resolves when the CLI exits (success or not).
+const AUTH_URL = /https?:\/\/\S+/;
+
+function openBrowser(url: string): void {
+  const opener = process.platform === "darwin" ? "open" : process.platform === "win32" ? "explorer" : "xdg-open";
+  execFile(opener, [url], (error) => {
+    if (error) console.error(`[login] failed to open browser: ${error.message}`);
+  });
+}
+
+// The CLI can't open the browser from the daemon, so open the printed OAuth URL ourselves.
+// Resolves when the CLI exits (success or not).
 export async function login(provider: McpProvider, cwd: string, server: string): Promise<boolean> {
   const bin = await resolveBinary(provider);
   return new Promise((resolve) => {
     const child = spawn(bin, ["mcp", "login", server], { cwd, stdio: ["ignore", "pipe", "pipe"] });
     const timer = setTimeout(() => child.kill(), 5 * 60_000);
-    child.stdout.on("data", (chunk) => console.log(`[login ${server}] ${chunk}`));
+    let output = "";
+    let opened = false;
+    child.stdout.on("data", (chunk) => {
+      console.log(`[login ${server}] ${chunk}`);
+      if (opened) return;
+      output += chunk;
+      // Wait for the line end so a URL split across chunks isn't opened truncated.
+      const url = output.split("\n").slice(0, -1).map((line) => AUTH_URL.exec(line)?.[0]).find(Boolean);
+      if (url) {
+        opened = true;
+        openBrowser(url);
+      }
+    });
     child.stderr.on("data", (chunk) => console.error(`[login ${server}] ${chunk}`));
     child.on("error", () => resolve(false));
     child.on("exit", (code) => {
