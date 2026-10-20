@@ -85,6 +85,7 @@ const HIDDEN_SERVERS = new Set([
   "claude.ai Mobbin",
   "claude.ai Google Calendar",
   "claude.ai Claude Docs",
+  "claude.ai Qonto",
 ]);
 
 export async function listServers(provider: McpProvider, cwd: string): Promise<McpServer[]> {
