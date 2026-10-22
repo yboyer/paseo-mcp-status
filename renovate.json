@@ -1,3 +1,15 @@
 {
-  "extends": ["github>yboyer/renovate-config"]
+  "extends": ["github>yboyer/renovate-config"],
+  "packageRules": [
+    {
+      "description": "Keep React compatible with the Paseo plugin SDK peer dependency.",
+      "matchPackageNames": ["react"],
+      "allowedVersions": "~19.1.0"
+    },
+    {
+      "description": "Keep React Native compatible with the React 19.1 runtime used by Paseo.",
+      "matchPackageNames": ["react-native"],
+      "allowedVersions": "~0.81.5"
+    }
+  ]
 }
