@@ -40,7 +40,7 @@ export const refreshStatusRpc = defineRpc({
 export const loginRpc = defineRpc({
   name: "mcp.login",
   input: target.extend({ server: z.string() }),
-  output: z.object({ ok: z.boolean() }),
+  output: z.object({ sessionId: z.string() }),
 });
 
 export const approveRpc = defineRpc({
@@ -63,3 +63,20 @@ export function toMcpProvider(provider: string): McpProvider | null {
   if (id.startsWith("codex")) return "codex";
   return null;
 }
+
+export const loginStatusRpc = defineRpc({
+  name: "mcp.login.status",
+  input: target.extend({ sessionId: z.string() }),
+  output: z.object({ url: z.string().nullable(), ok: z.boolean().nullable() }),
+});
+export const completeLoginRpc = defineRpc({
+  name: "mcp.login.complete",
+  input: z.object({ sessionId: z.string(), url: z.string() }),
+  output: z.object({ ok: z.boolean() }),
+});
+
+export const activeLoginRpc = defineRpc({
+  name: "mcp.login.active",
+  input: target,
+  output: z.object({ sessionId: z.string(), server: z.string() }).nullable(),
+});

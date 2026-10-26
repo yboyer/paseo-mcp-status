@@ -1,7 +1,7 @@
 import type { PluginHookAgent, PluginServerContext } from "@getpaseo/plugin/server";
-import { approveRpc, getStatusRpc, loginRpc, refreshStatusRpc, toMcpProvider } from "./shared/mcp";
+import { activeLoginRpc, completeLoginRpc, loginStatusRpc, approveRpc, getStatusRpc, loginRpc, refreshStatusRpc, toMcpProvider } from "./shared/mcp";
 import { approveClaudeServer } from "./server/approve";
-import { login } from "./server/cli";
+import { activeLogin, completeLogin, loginStatus, login } from "./server/cli";
 import * as store from "./server/store";
 
 import { pluginSettings } from "./shared/settings";
@@ -40,10 +40,19 @@ export default function contribute(server: PluginServerContext) {
     return store.refresh(provider, cwd);
   });
 
+  server.handle(activeLoginRpc, ({ provider, cwd }) => activeLogin(provider, cwd));
+
   server.handle(loginRpc, async ({ provider, cwd, server: name }) => {
-    const ok = await login(provider, cwd, name);
-    await store.refresh(provider, cwd);
-    return { ok };
+    return { sessionId: await login(provider, cwd, name) };
+  });
+  server.handle(loginStatusRpc, async ({ sessionId, provider, cwd }) => {
+    const result = loginStatus(sessionId);
+    if (result.ok !== null) await store.refresh(provider, cwd);
+    return result;
+  });
+  server.handle(completeLoginRpc, async ({ sessionId, url }) => {
+    await completeLogin(sessionId, url);
+    return { ok: true };
   });
 
   server.handle(approveRpc, async ({ provider, cwd, server: name }) => {

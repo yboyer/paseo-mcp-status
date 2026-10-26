@@ -5,7 +5,7 @@ import { Pressable, Text, View } from "react-native";
 import type { z } from "zod";
 import type { alertSchema } from "../shared/mcp";
 import { useTranslations } from "./use-translations";
-import { useLogin } from "./status-popover";
+import { LoginCallback, useLogin } from "./status-popover";
 
 export function AuthAlert({ agentId, item, theme, layout }: PluginTimelineItemProps<z.output<typeof alertSchema>>) {
   const { t } = useTranslations();
@@ -30,26 +30,29 @@ export function AuthAlert({ agentId, item, theme, layout }: PluginTimelineItemPr
     [theme, layout.compact, resolved],
   );
   return (
-    <View style={styles.card}>
-      <Icon
-        name={resolved ? "CircleCheck" : "KeyRound"}
-        size={16}
-        color={resolved ? theme.colors.statusSuccess : theme.colors.statusWarning}
-      />
-      <Text style={styles.text}>
-        {t.authAlert(server, resolved)}
-      </Text>
-      {resolved ? null : (
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={t.loginTo(server)}
-          disabled={login.isPending}
-          style={styles.button}
-          onPress={() => login.mutate(server)}
-        >
-          <Text style={styles.buttonText}>{login.isPending ? t.busy : t.login}</Text>
-        </Pressable>
-      )}
+    <View>
+      <View style={styles.card}>
+        <Icon
+          name={resolved ? "CircleCheck" : "KeyRound"}
+          size={16}
+          color={resolved ? theme.colors.statusSuccess : theme.colors.statusWarning}
+        />
+        <Text style={styles.text}>
+          {t.authAlert(server, resolved)}
+        </Text>
+        {resolved ? null : (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={t.loginTo(server)}
+            disabled={login.isPending}
+            style={styles.button}
+            onPress={() => login.mutate(server)}
+          >
+            <Text style={styles.buttonText}>{login.isPending ? t.busy : t.login}</Text>
+          </Pressable>
+        )}
+      </View>
+      <LoginCallback login={login} theme={theme} />
     </View>
   );
 }
