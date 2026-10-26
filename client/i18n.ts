@@ -24,6 +24,9 @@ interface Messages {
   title: string;
   servers: string;
   states: Record<McpServerState, string>;
+  callbackHelp: string;
+  callbackUrl: string;
+  callbackSubmit: string;
   login: string;
   busy: string;
   approve: string;
@@ -50,6 +53,9 @@ export const translations: Record<Language, Messages> = {
     title: "MCP server status",
     servers: "MCP servers",
     states: { connected: "Connected", "needs-auth": "Authentication required", "pending-approval": "Pending approval", failed: "Failed", disabled: "Disabled" },
+    callbackHelp: "If the browser ends on an unreachable localhost page, copy its full URL and paste it here to finish signing in.",
+    callbackUrl: "Callback URL",
+    callbackSubmit: "Complete sign-in",
     login: "Sign in",
     busy: "In progress…",
     approve: "Approve",
@@ -74,6 +80,9 @@ export const translations: Record<Language, Messages> = {
     title: "Statut des serveurs MCP",
     servers: "Serveurs MCP",
     states: { connected: "Connecté", "needs-auth": "Auth requise", "pending-approval": "En attente d'approbation", failed: "Échec", disabled: "Désactivé" },
+    callbackHelp: "Si le navigateur arrive sur une page localhost inaccessible, copiez son URL complète et collez-la ici pour terminer la connexion.",
+    callbackUrl: "URL de retour",
+    callbackSubmit: "Terminer la connexion",
     login: "Se connecter",
     busy: "En cours…",
     approve: "Approuver",

@@ -8,7 +8,7 @@ A [Paseo](https://github.com/getpaseo) plugin that shows the health of the MCP s
 
 - **Composer pill** per agent showing connected vs. active servers, e.g. `MCP 3/4 ⚠`.
 - **Status popover** listing every server with its target, state and detail, plus a manual refresh.
-- **One-click OAuth login** for servers that need authentication (runs `<cli> mcp login <server>`, which opens the browser).
+- **OAuth login** for servers that need authentication: runs `<cli> mcp login <server>` on the host and opens the authorization URL in the client device’s browser. If a remote/mobile browser ends on an unreachable localhost callback, paste the full callback URL into the plugin to finish signing in. The callback is validated against the session’s loopback address and OAuth state before forwarding it to the CLI.
 - **Project server approval** for Claude Code: approves pending `.mcp.json` servers by adding them to `enabledMcpjsonServers` in `<cwd>/.claude/settings.local.json`.
 - **Timeline alerts** posted in the agent conversation when a server needs authentication, updated in place once it is resolved.
 
@@ -29,7 +29,7 @@ CLI binaries are resolved through the login shell (`$SHELL -lc "command -v <cli>
 
 ## Requirements
 
-- Paseo `>= 0.11.2`
+- Paseo `>= 0.12.0`
 - `claude` and/or `codex` CLI installed and available in your login shell
 
 ## Project layout

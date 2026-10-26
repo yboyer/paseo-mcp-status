@@ -1,15 +1,18 @@
 import type { PluginTheme } from "@getpaseo/plugin";
 import type { PluginButtonContentProps } from "@getpaseo/plugin/client";
-import { useAgent, useRpc } from "@getpaseo/plugin/client";
-import { Icon, useToast } from "@getpaseo/plugin/client/react-native";
+import { openExternalUrl, useAgent, useRpc } from "@getpaseo/plugin/client";
+import { Icon, TextInput, useToast } from "@getpaseo/plugin/client/react-native";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useMemo } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Pressable, Text, View } from "react-native";
 import { useTranslations } from "./use-translations";
 import {
+  activeLoginRpc,
   approveRpc,
   getStatusRpc,
   loginRpc,
+  loginStatusRpc,
+  completeLoginRpc,
   refreshStatusRpc,
   toMcpProvider,
   type McpProvider,
@@ -38,20 +41,94 @@ export function statusQueryKey(target: Target) {
 export function useLogin(target: Target) {
   const { t } = useTranslations();
   const login = useRpc(loginRpc);
+  const getActiveLogin = useRpc(activeLoginRpc);
+  const openOnStart = useRef(false);
+  const status = useRpc(loginStatusRpc);
+  const complete = useRpc(completeLoginRpc);
+  const [sessionId, setSessionId] = useState<string | null>(null);
+  const [callback, setCallback] = useState("");
   const toast = useToast();
   const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: (server: string) => {
-      toast.show(t.loginStarted(server), { variant: "info", durationMs: 4000 });
-      return login({ ...target, server });
+  const activeKey = ["mcp-login-active", target.provider, target.cwd];
+  const active = useQuery({
+    queryKey: activeKey,
+    queryFn: () => getActiveLogin(target),
+    staleTime: 0,
+    refetchOnMount: "always",
+  });
+  const mutation = useMutation({
+    mutationFn: async (server: string) => {
+      const shouldOpen = openOnStart.current;
+      openOnStart.current = false;
+      const { sessionId } = await login({ ...target, server });
+      queryClient.setQueryData(activeKey, { sessionId, server });
+      setSessionId(sessionId);
+      setCallback("");
+      let opened = false;
+      const deadline = Date.now() + 5 * 60_000 + 10_000;
+      while (Date.now() < deadline) {
+        const result = await status({ ...target, sessionId });
+        if (result.ok !== null) return { ok: result.ok };
+        if (result.url && !opened && shouldOpen) {
+          await openExternalUrl(result.url);
+          opened = true;
+          toast.show(t.loginStarted(server), { variant: "info", durationMs: 4000 });
+        }
+        await new Promise((resolve) => setTimeout(resolve, 1000));
+      }
+      return { ok: false };
     },
     onSuccess: ({ ok }, server) => {
       if (ok) toast.show(t.loginSucceeded(server), { variant: "success" });
       else toast.error(t.loginFailed(server));
-      void queryClient.invalidateQueries({ queryKey: statusQueryKey(target) });
     },
     onError: (error: Error) => toast.error(error.message),
+    onSettled: () => {
+      setSessionId(null);
+      void queryClient.invalidateQueries({ queryKey: activeKey });
+      void queryClient.invalidateQueries({ queryKey: statusQueryKey(target) });
+    },
   });
+  // The popover can unmount while Android opens the browser. Recover the
+  // daemon's pending session instead of requiring another sign-in attempt.
+  useEffect(() => {
+    if (active.isFetchedAfterMount && active.data && mutation.isIdle) {
+      mutation.mutate(active.data.server);
+    }
+  }, [active.isFetchedAfterMount, active.data, mutation.isIdle, mutation.mutate]);
+  const submit = useMutation({
+    mutationFn: () => complete({ sessionId: sessionId!, url: callback }),
+    onError: (error: Error) => toast.error(error.message),
+  });
+  return {
+    ...mutation,
+    isPending: mutation.isPending || active.isLoading || (mutation.isIdle && !!active.data),
+    mutate: (server: string) => {
+      openOnStart.current = true;
+      mutation.mutate(server);
+    },
+    sessionId, callback, setCallback, submit,
+  };
+}
+
+export function LoginCallback({ login, theme }: { login: ReturnType<typeof useLogin>; theme: PluginTheme }) {
+  const { t } = useTranslations();
+  if (!login.sessionId || !login.isPending) return null;
+  const disabled = !login.callback.trim() || login.submit.isPending;
+  const submit = () => {
+    if (!disabled) login.submit.mutate();
+  };
+  return <View style={{ gap: 8 }}>
+    <Text style={{ color: theme.colors.foregroundMuted }}>{t.callbackHelp}</Text>
+    <TextInput accessibilityLabel={t.callbackUrl} placeholder={t.callbackUrl}
+      placeholderTextColor={theme.colors.foregroundMuted} autoCapitalize="none" autoCorrect={false}
+      value={login.callback} onChangeText={login.setCallback}
+      returnKeyType="done" onSubmitEditing={submit}
+      style={{ color: theme.colors.foreground, borderColor: theme.colors.border, borderWidth: 1, padding: 8 }} />
+    <Pressable accessibilityRole="button" disabled={disabled} onPress={submit}>
+      <Text style={{ color: theme.colors.accent }}>{t.callbackSubmit}</Text>
+    </Pressable>
+  </View>;
 }
 
 export function StatusPopover(props: PluginButtonContentProps) {
@@ -176,6 +253,7 @@ function StatusList({ theme, compact, target }: { theme: PluginTheme; compact: b
           <Icon name="RefreshCw" size={14} color={theme.colors.foreground} />
         </Pressable>
       </View>
+      <LoginCallback login={login} theme={theme} />
       {data?.error ? <Text style={styles.error}>{data.error}</Text> : null}
       {data && data.servers.length === 0 && !checking ? <Text style={styles.muted}>{t.empty}</Text> : null}
       {data?.servers.map((server) => (

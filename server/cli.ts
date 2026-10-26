@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { execFile, spawn } from "node:child_process";
 import type { McpProvider, McpServer } from "../shared/mcp";
 
@@ -84,40 +85,103 @@ export async function listServers(provider: McpProvider, cwd: string): Promise<M
     : parseCodexList(await run("codex", ["mcp", "list", "--json"], cwd, 30_000));
 }
 
-const AUTH_URL = /https?:\/\/\S+/;
+// Each session is addressed by an unguessable token, including callback submission.
+interface LoginSession {
+  provider: McpProvider;
+  cwd: string;
+  server: string;
+  url: string | null;
+  ok: boolean | null;
+  callback: URL | null;
+  state: string | null;
+}
+const sessions = new Map<string, LoginSession>();
 
-function openBrowser(url: string): void {
-  const opener = process.platform === "darwin" ? "open" : process.platform === "win32" ? "explorer" : "xdg-open";
-  execFile(opener, [url], (error) => {
-    if (error) console.error(`[login] failed to open browser: ${error.message}`);
-  });
+export async function login(provider: McpProvider, cwd: string, server: string): Promise<string> {
+  const bin = await resolveBinary(provider);
+  // Re-check after resolving the binary so simultaneous calls reuse one CLI.
+  const pending = activeLogin(provider, cwd);
+  if (pending) {
+    if (pending.server !== server) throw new Error("Another MCP sign-in is already in progress");
+    return pending.sessionId;
+  }
+  const id = randomUUID();
+  const child = spawn(bin, ["mcp", "login", server], { cwd, stdio: ["ignore", "pipe", "pipe"] });
+  const session: LoginSession = { provider, cwd, server, url: null, ok: null, callback: null, state: null };
+  sessions.set(id, session);
+  const timer = setTimeout(() => { child.kill(); finish(false); }, 5 * 60_000);
+  function finish(ok: boolean) {
+    if (session.ok !== null) return;
+    session.ok = ok;
+    clearTimeout(timer);
+    setTimeout(() => sessions.delete(id), 60_000).unref();
+  }
+  // Keep stdout and stderr separate: either may carry the authorization URL.
+  function capture() {
+    let output = "";
+    return (chunk: Buffer) => {
+      if (session.url) return;
+      output = (output + chunk.toString()).slice(-64 * 1024);
+      const lines = output.split(/\r?\n/);
+      output = lines.pop() ?? "";
+      for (const line of lines) {
+        for (const match of line.matchAll(/https?:\/\/[^\s\u001b]+/g)) {
+          try {
+            const url = new URL(match[0]);
+            const redirect = url.searchParams.get("redirect_uri");
+            if (!redirect) continue;
+            session.callback = new URL(redirect);
+            session.state = url.searchParams.get("state");
+            session.url = url.href;
+            return;
+          } catch { /* Ignore non-URL CLI output. */ }
+        }
+      }
+    };
+  }
+  child.stdout!.on("data", capture());
+  child.stderr!.on("data", capture());
+  child.on("error", () => finish(false));
+  child.on("close", (code) => finish(code === 0));
+  return id;
 }
 
-// The CLI can't open the browser from the daemon, so open the printed OAuth URL ourselves.
-// Resolves when the CLI exits (success or not).
-export async function login(provider: McpProvider, cwd: string, server: string): Promise<boolean> {
-  const bin = await resolveBinary(provider);
-  return new Promise((resolve) => {
-    const child = spawn(bin, ["mcp", "login", server], { cwd, stdio: ["ignore", "pipe", "pipe"] });
-    const timer = setTimeout(() => child.kill(), 5 * 60_000);
-    let output = "";
-    let opened = false;
-    child.stdout.on("data", (chunk) => {
-      console.log(`[login ${server}] ${chunk}`);
-      if (opened) return;
-      output += chunk;
-      // Wait for the line end so a URL split across chunks isn't opened truncated.
-      const url = output.split("\n").slice(0, -1).map((line) => AUTH_URL.exec(line)?.[0]).find(Boolean);
-      if (url) {
-        opened = true;
-        openBrowser(url);
-      }
-    });
-    child.stderr.on("data", (chunk) => console.error(`[login ${server}] ${chunk}`));
-    child.on("error", () => resolve(false));
-    child.on("exit", (code) => {
-      clearTimeout(timer);
-      resolve(code === 0);
-    });
-  });
+export function activeLogin(provider: McpProvider, cwd: string) {
+  for (const [sessionId, session] of sessions) {
+    if (session.provider === provider && session.cwd === cwd && session.ok === null) {
+      return { sessionId, server: session.server };
+    }
+  }
+  return null;
+}
+
+export function loginStatus(id: string) {
+  const session = sessions.get(id);
+  if (!session) throw new Error("Authentication session expired");
+  return { url: session.url, ok: session.ok };
+}
+
+export async function completeLogin(id: string, value: string): Promise<void> {
+  const session = sessions.get(id);
+  if (!session || session.ok !== null || !session.callback || !session.state) {
+    throw new Error("No pending authentication callback");
+  }
+  const url = new URL(value.trim());
+  const expected = session.callback;
+  // Never let a client turn this endpoint into an arbitrary HTTP proxy.
+  if (expected.protocol !== "http:" || !["localhost", "127.0.0.1", "[::1]"].includes(expected.hostname)
+      || url.origin !== expected.origin || url.pathname !== expected.pathname
+      || url.hash || url.username || url.password
+      || url.searchParams.get("state") !== session.state) {
+    throw new Error("Invalid authentication callback URL");
+  }
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 10_000);
+  try {
+    const response = await fetch(url, { redirect: "error", signal: controller.signal });
+    await response.body?.cancel();
+    if (!response.ok) throw new Error("Authentication callback failed");
+  } finally {
+    clearTimeout(timer);
+  }
 }
