@@ -19,7 +19,7 @@
   "devDependencies": {
     "@getpaseo/plugin": "0.15.4",
     "@tanstack/react-query": "5.107.1",
-    "@tsconfig/node26": "26.0.1",
+    "@tsconfig/node26": "26.0.2",
     "@types/node": "26.6.6",
     "@types/react": "19.3.0",
     "react": "19.3.1",
